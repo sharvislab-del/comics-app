@@ -115,6 +115,20 @@
   .galeria .item img{width:110px; height:110px; object-fit:cover; border-radius:8px; border:1px solid var(--border); cursor:pointer;}
   .galeria .item p{font-size:10.5px; color:var(--muted); margin:4px 0 0; max-height:28px; overflow:hidden;}
   .galeria-empty{font-size:12.5px; color:var(--muted);}
+
+  #panel{display:none; border-bottom:1px solid var(--border); background:var(--panel2); padding:16px 20px;}
+  #panel.open{display:block;}
+  .panel-inner{max-width:860px; margin:0 auto; display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end;}
+  .panel-inner .field-row{display:flex; flex-direction:column; gap:6px;}
+  .panel-inner label{font-size:12px; margin:0;}
+  .panel-inner input, .panel-inner select{
+    background:var(--panel); border:1px solid var(--border); color:var(--text);
+    border-radius:8px; padding:7px 10px; font-size:13px; outline:none; font-family:inherit;
+  }
+  .panel-inner input:focus, .panel-inner select:focus{border-color:var(--accent);}
+  #geminiKey{width:220px;}
+  .panel-hint{font-size:11px; color:var(--muted); max-width:260px;}
+  .panel-hint a{color:var(--accent);}
 </style>
 </head>
 <body>
@@ -122,7 +136,25 @@
 <header>
   <h1>Generador de <span>Viñetas</span> de Cómic</h1>
   <p>Escribí la escena, elegí el estilo, y descargá la imagen. Gratis, sin cuentas ni configuración.</p>
+  <button class="btn secondary" id="togglePanel" style="margin-top:10px;">⚙ Mejorar calidad (opcional)</button>
 </header>
+
+<div id="panel">
+  <div class="panel-inner">
+    <div class="field-row">
+      <label>Clave de Gemini API (opcional)</label>
+      <input type="password" id="geminiKey" placeholder="Tu clave de Gemini">
+    </div>
+    <div class="field-row">
+      <label>Modelo</label>
+      <select id="geminiModel">
+        <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+        <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite</option>
+      </select>
+    </div>
+    <div class="panel-hint">Sin esto, el armado del prompt usa un modelo de texto gratis más débil. Con tu clave de Gemini (gratis en <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a>), las imágenes respetan mucho mejor lo que describís.</div>
+  </div>
+</div>
 
 <main>
 
@@ -140,15 +172,34 @@
           <input type="text" id="pDescripcion" placeholder="Ej: chica joven, pelo corto violeta, campera de cuero negra">
         </div>
       </div>
+      <div class="field">
+        <label>Foto de referencia (opcional, para que se parezca de verdad a alguien real)</label>
+        <input type="file" id="pFoto" accept="image/*">
+      </div>
       <button class="btn secondary" id="addPersonajeBtn">+ Agregar personaje</button>
+      <span class="status" id="statusPersonaje"></span>
     </details>
   </div>
 
   <div class="card">
     <h2>✏️ Tu escena</h2>
+
     <div class="field">
-      <label>¿Qué pasa en esta viñeta?</label>
+      <label>¿Qué querés crear?</label>
+      <div class="toggle-group" id="modoCreacionGroup">
+        <div class="toggle-btn selected" data-modo="escena">🖼️ Una escena</div>
+        <div class="toggle-btn" data-modo="historia">📖 Historia de varias páginas</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label id="escenaLabel">¿Qué pasa en esta viñeta?</label>
       <textarea id="escena" placeholder="Ej: Marta entra al bar de noche, enojada. Hay gente bailando de fondo y luces de neón."></textarea>
+    </div>
+
+    <div class="field" id="paginasField" style="display:none; max-width:220px;">
+      <label>Cuántas páginas/paneles</label>
+      <div class="cantidad-row" id="paginasRow"></div>
     </div>
 
     <div class="field">
@@ -168,7 +219,7 @@
           <div class="toggle-btn" data-modo="suelta">🎨 Imagen suelta<br><span style="font-size:9.5px;">(para armar vos la página)</span></div>
         </div>
       </div>
-      <div class="field" style="max-width:180px;">
+      <div class="field" style="max-width:180px;" id="cantidadField">
         <label>Cuántas opciones</label>
         <div class="cantidad-row" id="cantidadRow"></div>
         <div class="hint-muted" id="tiempoAviso"></div>
@@ -217,7 +268,15 @@ const ESTILOS = {
   cartoon:     {label:'Cartoon animado',   prompt:'animated cartoon style, bold outlines, simplified shapes, bright colors',
     svg:`<svg viewBox="0 0 100 100"><rect width="100" height="100" fill="#4ea8de"/><circle cx="50" cy="55" r="32" fill="#ffd23f" stroke="#111" stroke-width="4"/><circle cx="40" cy="48" r="5" fill="#111"/><circle cx="62" cy="48" r="5" fill="#111"/><path d="M35 65 Q50 78 65 65" stroke="#111" stroke-width="4" fill="none" stroke-linecap="round"/></svg>`},
   semirealista:{label:'Semi-realista',     prompt:'semi-realistic digital painting comic style, detailed shading, dramatic lighting',
-    svg:`<svg viewBox="0 0 100 100"><defs><radialGradient id="sph" cx="35%" cy="35%" r="70%"><stop offset="0%" stop-color="#e8ddc8"/><stop offset="60%" stop-color="#9c8362"/><stop offset="100%" stop-color="#3d3226"/></radialGradient></defs><rect width="100" height="100" fill="#1c1c1c"/><circle cx="50" cy="50" r="35" fill="url(#sph)"/></svg>`}
+    svg:`<svg viewBox="0 0 100 100"><defs><radialGradient id="sph" cx="35%" cy="35%" r="70%"><stop offset="0%" stop-color="#e8ddc8"/><stop offset="60%" stop-color="#9c8362"/><stop offset="100%" stop-color="#3d3226"/></radialGradient></defs><rect width="100" height="100" fill="#1c1c1c"/><circle cx="50" cy="50" r="35" fill="url(#sph)"/></svg>`},
+  shonen:      {label:'Shonen (acción)',   prompt:'shonen anime manga style, dynamic action speed lines, intense expressive faces, high contrast ink, energetic battle atmosphere',
+    svg:`<svg viewBox="0 0 100 100"><rect width="100" height="100" fill="#1a1a1a"/><g stroke="#ff4d4d" stroke-width="4"><line x1="0" y1="20" x2="100" y2="40"/><line x1="0" y1="50" x2="100" y2="55"/><line x1="0" y1="80" x2="100" y2="70"/></g><circle cx="50" cy="50" r="18" fill="#fff"/></svg>`},
+  manhwa:      {label:'Manhwa (romance)',  prompt:'Korean manhwa webtoon style, soft digital coloring, detailed expressive eyes, romantic soft lighting, clean modern linework',
+    svg:`<svg viewBox="0 0 100 100"><defs><linearGradient id="mh" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#ffd6e8"/><stop offset="100%" stop-color="#d6c6f5"/></linearGradient></defs><rect width="100" height="100" fill="url(#mh)"/><path d="M50 75 C20 55,20 25,50 40 C80 25,80 55,50 75Z" fill="#fff" opacity="0.85"/></svg>`},
+  seinen:      {label:'Seinen (maduro)',   prompt:'seinen manga style, mature realistic proportions, moody dramatic shading, detailed crosshatching, darker somber tone',
+    svg:`<svg viewBox="0 0 100 100"><defs><linearGradient id="sn" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3a3a3a"/><stop offset="100%" stop-color="#0a0a0a"/></linearGradient></defs><rect width="100" height="100" fill="url(#sn)"/><rect x="20" y="20" width="60" height="60" fill="none" stroke="#888" stroke-width="2"/></svg>`},
+  isekai:      {label:'Isekai (fantasía)', prompt:'isekai fantasy anime style, vibrant magical glowing effects, detailed fantasy armor and creatures, epic dramatic lighting',
+    svg:`<svg viewBox="0 0 100 100"><defs><radialGradient id="is" cx="50%" cy="50%" r="60%"><stop offset="0%" stop-color="#c9a8ff"/><stop offset="100%" stop-color="#2b1a4d"/></radialGradient></defs><rect width="100" height="100" fill="#150a2e"/><circle cx="50" cy="50" r="26" fill="url(#is)"/><circle cx="25" cy="20" r="3" fill="#fff"/><circle cx="75" cy="30" r="2" fill="#fff"/><circle cx="80" cy="75" r="2.5" fill="#fff"/></svg>`}
 };
 
 const FORMATOS = {
@@ -227,12 +286,24 @@ const FORMATOS = {
 };
 
 /* ---------- referencias a elementos ---------- */
+const togglePanelBtn = document.getElementById('togglePanel');
+const panelEl = document.getElementById('panel');
+const geminiKeyEl = document.getElementById('geminiKey');
+const geminiModelEl = document.getElementById('geminiModel');
+
 const personajesListEl = document.getElementById('personajesList');
 const pNombreEl = document.getElementById('pNombre');
 const pDescripcionEl = document.getElementById('pDescripcion');
+const pFotoEl = document.getElementById('pFoto');
 const addPersonajeBtn = document.getElementById('addPersonajeBtn');
+const statusPersonajeEl = document.getElementById('statusPersonaje');
 
 const escenaEl = document.getElementById('escena');
+const escenaLabel = document.getElementById('escenaLabel');
+const modoCreacionGroup = document.getElementById('modoCreacionGroup');
+const paginasField = document.getElementById('paginasField');
+const paginasRow = document.getElementById('paginasRow');
+const cantidadField = document.getElementById('cantidadField');
 const styleGrid = document.getElementById('styleGrid');
 const formatoGrid = document.getElementById('formatoGrid');
 const modoGroup = document.getElementById('modoGroup');
@@ -262,12 +333,21 @@ let estiloSel = 'manga';
 let formatoSel = 'cuadrado';
 let modoSel = 'vineta';
 let cantidadSel = 1;
+let modoCreacionSel = 'escena';
+let paginasSel = 3;
 
 let tandaPrompt = '';
+let historiaPrompts = [];
 let mencionadosTanda = [];
 let resultados = [];
 let candidatoRefUrl = null;
 let generando = false;
+
+geminiKeyEl.value = localStorage.getItem('gp_gemini_key') || '';
+geminiModelEl.value = localStorage.getItem('gp_gemini_model') || 'gemini-2.5-flash';
+geminiKeyEl.addEventListener('input', () => localStorage.setItem('gp_gemini_key', geminiKeyEl.value));
+geminiModelEl.addEventListener('change', () => localStorage.setItem('gp_gemini_model', geminiModelEl.value));
+togglePanelBtn.addEventListener('click', () => panelEl.classList.toggle('open'));
 
 /* ---------- construir selectores visuales ---------- */
 Object.entries(ESTILOS).forEach(([key, val]) => {
@@ -314,11 +394,40 @@ modoGroup.querySelectorAll('.toggle-btn').forEach(btn => {
 });
 
 function actualizarAvisoTiempo(){
-  tiempoAviso.textContent = cantidadSel > 1
-    ? `Tarda ~${cantidadSel * 15}-${cantidadSel * 20}s (el servicio gratuito limita la velocidad)`
+  const n = modoCreacionSel === 'historia' ? paginasSel : cantidadSel;
+  tiempoAviso.textContent = n > 1
+    ? `Tarda ~${n * 15}-${n * 20}s (el servicio gratuito limita la velocidad)`
     : '';
 }
 actualizarAvisoTiempo();
+
+[2,3,4,5,6].forEach(n => {
+  const btn = document.createElement('div');
+  btn.className = 'cantidad-btn' + (n === paginasSel ? ' selected' : '');
+  btn.textContent = n;
+  btn.addEventListener('click', () => {
+    paginasSel = n;
+    paginasRow.querySelectorAll('.cantidad-btn').forEach(b => b.classList.toggle('selected', Number(b.textContent) === n));
+    actualizarAvisoTiempo();
+  });
+  paginasRow.appendChild(btn);
+});
+
+modoCreacionGroup.querySelectorAll('.toggle-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    modoCreacionSel = btn.dataset.modo;
+    modoCreacionGroup.querySelectorAll('.toggle-btn').forEach(b => b.classList.toggle('selected', b === btn));
+    const esHistoria = modoCreacionSel === 'historia';
+    paginasField.style.display = esHistoria ? 'block' : 'none';
+    cantidadField.style.display = esHistoria ? 'none' : 'block';
+    escenaLabel.textContent = esHistoria ? 'Contame tu historia (sinopsis completa)' : '¿Qué pasa en esta viñeta?';
+    escenaEl.placeholder = esHistoria
+      ? 'Ej: Dean es un conejito curioso que vive en el bosque. Una noche descubre un mapa viejo que lo lleva a buscar un tesoro escondido junto a su amiga la ardilla Coco...'
+      : 'Ej: Marta entra al bar de noche, enojada. Hay gente bailando de fondo y luces de neón.';
+    crearBtn.textContent = esHistoria ? '📖 Crear historia' : '🎨 Crear';
+    actualizarAvisoTiempo();
+  });
+});
 
 /* ---------- personajes ---------- */
 function savePersonajes(){ localStorage.setItem('gp_personajes', JSON.stringify(personajes)); }
@@ -330,7 +439,10 @@ function renderPersonajes(){
     const div = document.createElement('div');
     div.className = 'personaje-item';
     div.innerHTML = `
-      <div class="info"><b>${p.nombre}</b><span>${p.descripcion}</span></div>
+      <div class="info" style="display:flex; align-items:center; gap:8px;">
+        ${p.refImageUrl ? `<img src="${p.refImageUrl}" style="width:32px;height:32px;border-radius:6px;object-fit:cover;">` : ''}
+        <div><b>${p.nombre}</b><span>${p.descripcion}</span></div>
+      </div>
       <div>${p.refImageUrl ? '<span class="tag">✓ tiene referencia</span> ' : ''}<button class="btn tiny secondary" data-id="${p.id}">✕</button></div>
     `;
     div.querySelector('button').addEventListener('click', () => {
@@ -343,15 +455,47 @@ function renderPersonajes(){
   refSelect.innerHTML = personajes.map(p => `<option value="${p.id}">${p.nombre}</option>`).join('');
 }
 
-addPersonajeBtn.addEventListener('click', () => {
+async function subirFotoAHost(file){
+  const formData = new FormData();
+  formData.append('reqtype', 'fileupload');
+  formData.append('fileToUpload', file);
+  const res = await fetch('https://catbox.moe/user/api.php', {method:'POST', body: formData});
+  if(!res.ok) throw new Error('fallo_subida');
+  const url = (await res.text()).trim();
+  if(!url.startsWith('http')) throw new Error('fallo_subida');
+  return url;
+}
+
+addPersonajeBtn.addEventListener('click', async () => {
   const nombre = pNombreEl.value.trim();
   const descripcion = pDescripcionEl.value.trim();
   if(!nombre) return;
-  personajes.push({id: Date.now().toString(), nombre, descripcion, refImageUrl: ''});
+  const foto = pFotoEl.files[0];
+
+  const nuevo = {id: Date.now().toString(), nombre, descripcion, refImageUrl: ''};
+
+  if(foto){
+    addPersonajeBtn.disabled = true;
+    statusPersonajeEl.textContent = '⏳ Subiendo foto...';
+    statusPersonajeEl.className = 'status';
+    try{
+      nuevo.refImageUrl = await subirFotoAHost(foto);
+      statusPersonajeEl.textContent = '✅ Personaje agregado con foto de referencia';
+      statusPersonajeEl.className = 'status ok';
+    }catch(e){
+      statusPersonajeEl.textContent = '⚠️ No se pudo subir la foto, se agregó solo con la descripción de texto';
+      statusPersonajeEl.className = 'status warn';
+    }finally{
+      addPersonajeBtn.disabled = false;
+    }
+  }
+
+  personajes.push(nuevo);
   savePersonajes();
   renderPersonajes();
   pNombreEl.value = '';
   pDescripcionEl.value = '';
+  pFotoEl.value = '';
 });
 
 /* ---------- galería ---------- */
@@ -379,6 +523,77 @@ async function fetchTextoPollinations(promptTexto){
   const res = await fetch(url);
   if(!res.ok) throw new Error('rate_limit_texto');
   return (await res.text()).trim().replace(/^["']|["']$/g, '');
+}
+
+/* ---------- Gemini opcional (mucho mejor siguiendo instrucciones) ---------- */
+async function fetchTextoGemini(promptTexto){
+  const key = geminiKeyEl.value.trim();
+  const model = geminiModelEl.value;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const res = await fetch(url, {
+    method:'POST',
+    headers:{'Content-Type':'application/json', 'x-goog-api-key': key},
+    body: JSON.stringify({
+      contents: [{role:'user', parts:[{text: promptTexto}]}],
+      generationConfig: {temperature:0.4, maxOutputTokens:600}
+    })
+  });
+  const data = await res.json();
+  if(!res.ok) throw new Error(data?.error?.message || 'rate_limit_gemini');
+  const texto = data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
+  return texto.trim().replace(/^["']|["']$/g, '');
+}
+
+async function armarPromptOptimizado(promptTexto){
+  const tieneGemini = geminiKeyEl.value.trim().length > 0;
+  if(tieneGemini){
+    try{ return await fetchTextoGemini(promptTexto); }
+    catch(e){ /* si falla Gemini, caemos al gratuito igual */ }
+  }
+  return await fetchTextoPollinations(promptTexto);
+}
+
+async function fetchJSONGemini(promptTexto, schema){
+  const key = geminiKeyEl.value.trim();
+  const model = geminiModelEl.value;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const res = await fetch(url, {
+    method:'POST',
+    headers:{'Content-Type':'application/json', 'x-goog-api-key': key},
+    body: JSON.stringify({
+      contents: [{role:'user', parts:[{text: promptTexto}]}],
+      generationConfig: {temperature:0.5, maxOutputTokens:4096, responseMimeType:'application/json', responseSchema: schema}
+    })
+  });
+  const data = await res.json();
+  if(!res.ok) throw new Error(data?.error?.message || 'rate_limit_gemini');
+  const raw = data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '[]';
+  return JSON.parse(raw);
+}
+
+function construirInstruccionesEscena(personajesTexto, framing){
+  return `Personajes que aparecen, con su descripción física EXACTA (respetala al pie de la letra, sin agregar ni quitar partes del cuerpo): ${personajesTexto}\nEstilo visual: ${ESTILOS[estiloSel].prompt}\nComposición: ${framing}\nCada prompt de imagen debe: 1) describir el escenario con hora del día y ambiente/iluminación, 2) describir a cada personaje presente con TODOS sus rasgos físicos tal cual se listaron, respetando la cantidad exacta de cada parte del cuerpo, 3) describir la acción/pose exacta y la expresión, 4) terminar con: anatomically correct, correct and natural number of limbs/ears/eyes for the species, no extra or duplicated body parts, no deformed hands, clean linework, no watermark, no on-image text or speech bubbles, high quality illustration, coherent single scene.`;
+}
+
+async function generarPromptsHistoria(sinopsis, n, personajesTexto, framing){
+  const instrucciones = construirInstruccionesEscena(personajesTexto, framing);
+  const tieneGemini = geminiKeyEl.value.trim().length > 0;
+
+  if(tieneGemini){
+    const promptTexto = `Sos un guionista y director de arte de cómics. Dividí esta sinopsis en español en EXACTAMENTE ${n} escenas secuenciales que cuenten la historia de principio a fin, en orden, sin saltos raros entre una y otra.\n\nSinopsis: "${sinopsis}"\n\n${instrucciones}\n\nDevolvé un array JSON de exactamente ${n} strings, cada uno el prompt final en inglés de esa escena (una sola línea cada uno, sin explicaciones ni comillas extra dentro del string), en el orden correcto de la historia.`;
+    try{
+      const schema = {type:'ARRAY', items:{type:'STRING'}, minItems:n, maxItems:n};
+      const arr = await fetchJSONGemini(promptTexto, schema);
+      if(Array.isArray(arr) && arr.length) return arr.slice(0, n);
+    }catch(e){ /* cae al fallback gratuito */ }
+  }
+
+  // Fallback sin Gemini: pedimos separado por un delimitador simple
+  const promptTexto = `Sos un guionista de cómics. Dividí esta sinopsis en español en EXACTAMENTE ${n} escenas secuenciales, en orden. Sinopsis: "${sinopsis}". ${instrucciones} Devolvé los ${n} prompts en inglés, cada uno en una línea separada, empezando cada línea con "###" y nada más (sin numerarlos, sin explicaciones).`;
+  const texto = await fetchTextoPollinations(promptTexto);
+  const partes = texto.split('###').map(s => s.trim()).filter(Boolean);
+  while(partes.length < n) partes.push(partes[partes.length - 1] || sinopsis);
+  return partes.slice(0, n);
 }
 
 function construirUrlImagen(promptOptimizado, formato, modelo, imageRef){
@@ -479,11 +694,14 @@ function calcularModeloYReferencia(){
 }
 
 async function generarUnaImagen(idx){
+  const esHistoria = modoCreacionSel === 'historia';
+  const promptUsado = esHistoria ? historiaPrompts[idx] : tandaPrompt;
   const {modelo, imageRef} = calcularModeloYReferencia();
-  const url = construirUrlImagen(tandaPrompt, formatoSel, modelo, imageRef);
+  const url = construirUrlImagen(promptUsado, formatoSel, modelo, imageRef);
   await precargarImagen(url);
   resultados[idx] = {url, estado:'ok'};
-  galeria.unshift({escena: escenaEl.value.trim() || '(variante)', imageUrl:url, promptUsado: tandaPrompt, fecha: Date.now()});
+  const etiqueta = esHistoria ? `Página ${idx+1} de la historia` : (escenaEl.value.trim() || '(variante)');
+  galeria.unshift({escena: etiqueta, imageUrl:url, promptUsado, fecha: Date.now()});
   saveGaleria();
   renderGaleria();
 }
@@ -506,14 +724,16 @@ async function crearTanda(reusarPrompt){
   if(generando) return;
   const escena = escenaEl.value.trim();
   if(!escena && !reusarPrompt){ setStatus('Escribí primero qué pasa en la escena.', 'error'); return; }
-  if(reusarPrompt && !tandaPrompt){ setStatus('Generá primero una tanda con "Crear".', 'error'); return; }
+  const yaHayPrompt = modoCreacionSel === 'historia' ? historiaPrompts.length > 0 : !!tandaPrompt;
+  if(reusarPrompt && !yaHayPrompt){ setStatus('Generá primero con "Crear".', 'error'); return; }
 
   generando = true;
   crearBtn.disabled = true;
   otraTandaBtn.disabled = true;
   candidatoRefUrl = null;
 
-  const n = cantidadSel;
+  const esHistoria = modoCreacionSel === 'historia';
+  const n = esHistoria ? paginasSel : cantidadSel;
   resultados = Array(n).fill(null).map(() => ({estado:'cargando'}));
   resultado.style.display = 'block';
   renderResultados();
@@ -521,22 +741,36 @@ async function crearTanda(reusarPrompt){
 
   try{
     if(!reusarPrompt){
-      setStatus('⏳ Pensando cómo dibujar tu escena...', '');
       mencionadosTanda = personajesMencionados(escena);
-      const personajesTexto = mencionadosTanda.map(p => `${p.nombre}: ${p.descripcion}`).join('; ') || 'ninguno especificado';
+      const personajesTexto = mencionadosTanda.map(p => `${p.nombre} (${p.nombre} debe verse EXACTAMENTE así, no cambies ni un detalle): ${p.descripcion}`).join('; ') || 'ninguno especificado, inventá algo coherente con la escena';
       const framing = modoSel === 'vineta'
         ? 'single comic panel composition, part of a larger comic page layout, may include a thin panel border'
         : 'standalone illustration only, no panel border or frame, simple uncluttered background so it can be cut out and combined with other illustrations later';
-      const metaPrompt = `Sos un experto en prompts para generadores de imágenes de cómic (estilo ${ESTILOS[estiloSel].prompt}). Con esta información, generá UNA sola línea de prompt en inglés, sin explicaciones, sin comillas, para generar la imagen:\nEscena: ${escena}\nEstilo: ${ESTILOS[estiloSel].prompt}\nComposición: ${framing}\nPersonajes presentes: ${personajesTexto}\nSiempre incluí en el prompt final (en inglés): anatomically correct, correct number of fingers and limbs, no extra limbs, clean linework, no watermark, no on-image text or speech bubbles, high quality illustration.\nDevolvé SOLO el prompt final en inglés, nada más.`;
-      tandaPrompt = await fetchTextoPollinations(metaPrompt);
+
+      if(esHistoria){
+        setStatus('⏳ Armando las páginas de tu historia...', '');
+        historiaPrompts = await generarPromptsHistoria(escena, n, personajesTexto, framing);
+        techBox.textContent = historiaPrompts.map((p,i) => `Página ${i+1}: ${p}`).join('\n\n');
+      } else {
+        setStatus('⏳ Pensando cómo dibujar tu escena...', '');
+        const metaPrompt = `Sos un ilustrador experto en traducir descripciones de escenas a prompts en inglés para generadores de imágenes tipo FLUX. Tu prioridad número 1 es NO PERDER NINGÚN DETALLE concreto de la escena original: hora del día, clima/iluminación, expresión/emoción, acción exacta que hace cada personaje, objetos mencionados. Si la escena dice "de noche" o "mirando las estrellas", eso TIENE que aparecer explícito en el prompt final.
+
+Escena original (en español): "${escena}"
+
+${construirInstruccionesEscena(personajesTexto, framing)}
+
+Devolvé SOLO el prompt final en inglés, una sola línea, sin explicaciones ni comillas.`;
+        tandaPrompt = await armarPromptOptimizado(metaPrompt);
+        techBox.textContent = tandaPrompt;
+      }
     }
 
-    techBox.textContent = tandaPrompt;
     techBox.style.display = 'none';
     techToggle.textContent = '🔍 Ver cómo se armó esta imagen';
 
     for(let i = 0; i < n; i++){
-      setStatus(n > 1 ? `⏳ Generando opción ${i+1} de ${n}...` : '⏳ Dibujando...', '');
+      const etiquetaProgreso = esHistoria ? `página ${i+1} de ${n}` : `opción ${i+1} de ${n}`;
+      setStatus(n > 1 ? `⏳ Generando ${etiquetaProgreso}...` : '⏳ Dibujando...', '');
       try{
         await generarUnaImagen(i);
       }catch(e){
