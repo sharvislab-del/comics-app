@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Generador de Viñetas de Cómic</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222c; --border:#2a2f3a;
+    --text:#e6e8ec; --muted:#9aa1ad; --accent:#e0785a; --accent2:#c96345;
+    --ok:#57c785; --error:#e05a5a; --warn:#e0b95a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--text); min-height:100vh;
+  }
+  header{padding:16px 20px; border-bottom:1px solid var(--border); background:var(--panel); text-align:center;}
+  header h1{font-size:18px; margin:0 0 4px; font-weight:700;}
+  header h1 span{color:var(--accent);}
+  header p{font-size:12.5px; color:var(--muted); margin:0;}
+
+  main{max-width:860px; margin:0 auto; padding:24px 20px 60px;}
+
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:20px; margin-bottom:20px;}
+  .card h2{font-size:14px; margin:0 0 14px; display:flex; align-items:center; gap:8px;}
+
+  textarea, input[type=text]{
+    width:100%; background:var(--panel2); border:1px solid var(--border); color:var(--text);
+    border-radius:10px; padding:11px 14px; font-size:14px; font-family:inherit; outline:none;
+  }
+  textarea{resize:vertical; min-height:90px;}
+  textarea:focus, input:focus{border-color:var(--accent);}
+  label{font-size:12.5px; color:var(--muted); display:block; margin-bottom:8px;}
+  .field{margin-bottom:16px;}
+  .row{display:flex; gap:14px; flex-wrap:wrap;}
+  .row > .field{flex:1; min-width:200px;}
+
+  .btn{
+    background:var(--accent2); color:#fff; border:none; border-radius:10px; padding:11px 20px;
+    font-size:14px; cursor:pointer; font-weight:600;
+  }
+  .btn:hover{background:var(--accent);}
+  .btn.secondary{background:transparent; border:1px solid var(--border); color:var(--muted); font-weight:500; padding:9px 16px; font-size:13px;}
+  .btn.secondary:hover{color:var(--text); border-color:var(--muted);}
+  .btn.tiny{padding:5px 9px; font-size:12px; border-radius:8px;}
+  .btn:disabled{opacity:.45; cursor:not-allowed;}
+
+  details.personajes{margin-bottom:0;}
+  details summary{cursor:pointer; font-size:13.5px; color:var(--text); list-style:none; display:flex; align-items:center; gap:6px; margin-bottom:10px;}
+  details summary::-webkit-details-marker{display:none;}
+  details summary::before{content:'▸'; color:var(--muted); font-size:11px;}
+  details[open] summary::before{content:'▾';}
+  .personaje-item{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:8px 12px; margin-bottom:8px; font-size:12.5px;
+  }
+  .personaje-item .info b{color:var(--text);}
+  .personaje-item .info span{color:var(--muted); display:block; font-size:11.5px;}
+  .personaje-item .tag{font-size:10px; color:var(--ok);}
+
+  /* --- selectores visuales --- */
+  .hint-muted{font-size:11px; color:var(--muted); margin-bottom:10px;}
+  .style-grid, .formato-grid{display:flex; gap:10px; flex-wrap:wrap;}
+  .style-card, .formato-card{
+    width:78px; background:var(--panel2); border:2px solid var(--border); border-radius:10px;
+    padding:6px; cursor:pointer; text-align:center;
+  }
+  .style-card:hover, .formato-card:hover{border-color:var(--muted);}
+  .style-card.selected, .formato-card.selected{border-color:var(--accent);}
+  .style-card svg{width:100%; height:56px; border-radius:6px; display:block;}
+  .style-card span, .formato-card span{font-size:9.5px; color:var(--muted); display:block; margin-top:5px; line-height:1.2;}
+  .style-card.selected span, .formato-card.selected span{color:var(--text);}
+  .formato-card{height:90px; display:flex; flex-direction:column; align-items:center; justify-content:center;}
+  .formato-shape{background:#3a4356; border:1px solid var(--muted); border-radius:3px;}
+
+  .toggle-group{display:flex; gap:8px;}
+  .toggle-btn{
+    flex:1; background:var(--panel2); border:2px solid var(--border); color:var(--muted);
+    border-radius:10px; padding:10px; font-size:13px; cursor:pointer; text-align:center; font-weight:500;
+  }
+  .toggle-btn.selected{border-color:var(--accent); color:var(--text);}
+
+  .cantidad-row{display:flex; gap:8px; align-items:center;}
+  .cantidad-btn{
+    width:38px; height:38px; background:var(--panel2); border:2px solid var(--border); color:var(--muted);
+    border-radius:10px; font-size:14px; cursor:pointer; font-weight:600;
+  }
+  .cantidad-btn.selected{border-color:var(--accent); color:var(--text);}
+
+  .status{font-size:12.5px; margin-top:10px; color:var(--muted);}
+  .status.error{color:var(--error);}
+  .status.ok{color:var(--ok);}
+  .status.warn{color:var(--warn);}
+
+  #resultado{display:none;}
+  .result-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:14px;}
+  .tile{background:var(--panel2); border:2px solid var(--border); border-radius:12px; overflow:hidden; display:flex; flex-direction:column;}
+  .tile.ref-candidata{border-color:var(--ok);}
+  .tile-img{flex:1; min-height:150px; display:flex; align-items:center; justify-content:center; background:#12141a; position:relative;}
+  .tile-img img{width:100%; height:100%; object-fit:cover; display:block;}
+  .spinner{width:26px; height:26px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .tile-error{color:var(--error); font-size:11.5px; padding:10px; text-align:center;}
+  .tile-actions{display:flex; gap:4px; padding:6px; background:var(--panel); justify-content:center;}
+
+  .ref-row{display:flex; gap:8px; align-items:center; margin-top:14px; flex-wrap:wrap; font-size:12.5px; color:var(--muted); background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:10px 12px;}
+  .ref-row select{background:var(--panel); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:6px 10px; font-size:12.5px;}
+
+  .tech-toggle{font-size:11.5px; color:var(--muted); cursor:pointer; margin-top:14px; text-decoration:underline; display:inline-block;}
+  .tech-box{background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:11.5px; color:var(--muted); margin-top:8px; display:none; font-family:'SF Mono',Consolas,monospace; word-break:break-word;}
+
+  .galeria{display:flex; gap:10px; overflow-x:auto; padding-bottom:6px;}
+  .galeria .item{flex:0 0 auto; width:110px;}
+  .galeria .item img{width:110px; height:110px; object-fit:cover; border-radius:8px; border:1px solid var(--border); cursor:pointer;}
+  .galeria .item p{font-size:10.5px; color:var(--muted); margin:4px 0 0; max-height:28px; overflow:hidden;}
+  .galeria-empty{font-size:12.5px; color:var(--muted);}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Generador de <span>Viñetas</span> de Cómic</h1>
+  <p>Escribí la escena, elegí el estilo, y descargá la imagen. Gratis, sin cuentas ni configuración.</p>
+</header>
+
+<main>
+
+  <div class="card">
+    <details class="personajes">
+      <summary>👥 Tus personajes (opcional, para que salgan siempre iguales)</summary>
+      <div id="personajesList"></div>
+      <div class="row">
+        <div class="field">
+          <label>Nombre del personaje</label>
+          <input type="text" id="pNombre" placeholder="Ej: Marta">
+        </div>
+        <div class="field">
+          <label>Cómo es (físico, ropa, etc.)</label>
+          <input type="text" id="pDescripcion" placeholder="Ej: chica joven, pelo corto violeta, campera de cuero negra">
+        </div>
+      </div>
+      <button class="btn secondary" id="addPersonajeBtn">+ Agregar personaje</button>
+    </details>
+  </div>
+
+  <div class="card">
+    <h2>✏️ Tu escena</h2>
+    <div class="field">
+      <label>¿Qué pasa en esta viñeta?</label>
+      <textarea id="escena" placeholder="Ej: Marta entra al bar de noche, enojada. Hay gente bailando de fondo y luces de neón."></textarea>
+    </div>
+
+    <div class="field">
+      <label>Estilo de dibujo <span style="opacity:.7">(vista previa ilustrativa, no es el resultado final)</span></label>
+      <div class="style-grid" id="styleGrid"></div>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label>Formato</label>
+        <div class="formato-grid" id="formatoGrid"></div>
+      </div>
+      <div class="field">
+        <label>¿Viñeta de cómic o imagen suelta?</label>
+        <div class="toggle-group" id="modoGroup">
+          <div class="toggle-btn selected" data-modo="vineta">🖼️ Viñeta de cómic</div>
+          <div class="toggle-btn" data-modo="suelta">🎨 Imagen suelta<br><span style="font-size:9.5px;">(para armar vos la página)</span></div>
+        </div>
+      </div>
+      <div class="field" style="max-width:180px;">
+        <label>Cuántas opciones</label>
+        <div class="cantidad-row" id="cantidadRow"></div>
+        <div class="hint-muted" id="tiempoAviso"></div>
+      </div>
+    </div>
+
+    <button class="btn" id="crearBtn">🎨 Crear</button>
+    <button class="btn secondary" id="otraTandaBtn" style="display:none;">🔄 Otra tanda (mismo pedido)</button>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card" id="resultado">
+    <h2>🖼️ Resultado</h2>
+    <div class="result-grid" id="resultGrid"></div>
+
+    <div class="ref-row" id="refRow" style="display:none;">
+      <span id="refRowLabel">Guardar la imagen marcada como referencia de:</span>
+      <select id="refSelect"></select>
+      <button class="btn tiny secondary" id="refBtn">Guardar</button>
+    </div>
+
+    <span class="tech-toggle" id="techToggle">🔍 Ver cómo se armó esta imagen</span>
+    <div class="tech-box" id="techBox"></div>
+  </div>
+
+  <div class="card">
+    <h2>📚 Tu galería</h2>
+    <div class="galeria" id="galeria"></div>
+    <p class="galeria-empty" id="galeriaEmpty">Todavía no creaste ninguna viñeta.</p>
+    <p style="font-size:11px; color:var(--muted); margin-top:10px;">Los links de las imágenes son temporales — descargá las que te gusten para guardarlas en tu PC.</p>
+  </div>
+
+</main>
+
+<script>
+/* ---------- datos de estilos y formatos ---------- */
+const ESTILOS = {
+  manga:       {label:'Manga (B/N)',       prompt:'black and white manga style, screentones, dynamic ink linework, Japanese comic aesthetic',
+    svg:`<svg viewBox="0 0 100 100"><rect width="100" height="100" fill="#fff"/><g stroke="#111" stroke-width="3"><line x1="0" y1="80" x2="100" y2="55"/><line x1="0" y1="95" x2="100" y2="75"/><line x1="10" y1="100" x2="100" y2="95"/></g><circle cx="55" cy="40" r="22" fill="#111"/><circle cx="63" cy="34" r="4" fill="#fff"/></svg>`},
+  americano:   {label:'Cómic americano',   prompt:'American superhero comic book style, bold inks, vibrant flat colors, halftone shading',
+    svg:`<svg viewBox="0 0 100 100"><rect width="100" height="100" fill="#ffe14d"/><polygon points="50,5 61,35 95,35 68,55 78,90 50,68 22,90 32,55 5,35 39,35" fill="#e63946" stroke="#111" stroke-width="4"/></svg>`},
+  lineaclara:  {label:'Línea clara',       prompt:'clean line European comic style (ligne claire), like Tintín, flat colors, minimal shading, uniform line weight',
+    svg:`<svg viewBox="0 0 100 100"><rect width="100" height="100" fill="#aee1f9"/><rect x="25" y="25" width="50" height="50" rx="10" fill="#ffb84d" stroke="#111" stroke-width="3"/></svg>`},
+  acuarela:    {label:'Acuarela suave',    prompt:'soft watercolor illustration style, gentle colors, painterly texture',
+    svg:`<svg viewBox="0 0 100 100"><defs><filter id="b1"><feGaussianBlur stdDeviation="4"/></filter></defs><rect width="100" height="100" fill="#faf6ef"/><circle cx="40" cy="40" r="28" fill="#d8a7d1" opacity="0.6" filter="url(#b1)"/><circle cx="65" cy="60" r="24" fill="#a7c7d8" opacity="0.6" filter="url(#b1)"/></svg>`},
+  cartoon:     {label:'Cartoon animado',   prompt:'animated cartoon style, bold outlines, simplified shapes, bright colors',
+    svg:`<svg viewBox="0 0 100 100"><rect width="100" height="100" fill="#4ea8de"/><circle cx="50" cy="55" r="32" fill="#ffd23f" stroke="#111" stroke-width="4"/><circle cx="40" cy="48" r="5" fill="#111"/><circle cx="62" cy="48" r="5" fill="#111"/><path d="M35 65 Q50 78 65 65" stroke="#111" stroke-width="4" fill="none" stroke-linecap="round"/></svg>`},
+  semirealista:{label:'Semi-realista',     prompt:'semi-realistic digital painting comic style, detailed shading, dramatic lighting',
+    svg:`<svg viewBox="0 0 100 100"><defs><radialGradient id="sph" cx="35%" cy="35%" r="70%"><stop offset="0%" stop-color="#e8ddc8"/><stop offset="60%" stop-color="#9c8362"/><stop offset="100%" stop-color="#3d3226"/></radialGradient></defs><rect width="100" height="100" fill="#1c1c1c"/><circle cx="50" cy="50" r="35" fill="url(#sph)"/></svg>`}
+};
+
+const FORMATOS = {
+  cuadrado:   {label:'Cuadrado',   w:1024, h:1024, shape:{w:42,h:42}},
+  horizontal: {label:'Horizontal', w:1344, h:768,  shape:{w:60,h:34}},
+  vertical:   {label:'Vertical',   w:832,  h:1216, shape:{w:34,h:60}}
+};
+
+/* ---------- referencias a elementos ---------- */
+const personajesListEl = document.getElementById('personajesList');
+const pNombreEl = document.getElementById('pNombre');
+const pDescripcionEl = document.getElementById('pDescripcion');
+const addPersonajeBtn = document.getElementById('addPersonajeBtn');
+
+const escenaEl = document.getElementById('escena');
+const styleGrid = document.getElementById('styleGrid');
+const formatoGrid = document.getElementById('formatoGrid');
+const modoGroup = document.getElementById('modoGroup');
+const cantidadRow = document.getElementById('cantidadRow');
+const tiempoAviso = document.getElementById('tiempoAviso');
+const crearBtn = document.getElementById('crearBtn');
+const otraTandaBtn = document.getElementById('otraTandaBtn');
+const statusEl = document.getElementById('status');
+
+const resultado = document.getElementById('resultado');
+const resultGrid = document.getElementById('resultGrid');
+const refRow = document.getElementById('refRow');
+const refRowLabel = document.getElementById('refRowLabel');
+const refSelect = document.getElementById('refSelect');
+const refBtn = document.getElementById('refBtn');
+const techToggle = document.getElementById('techToggle');
+const techBox = document.getElementById('techBox');
+
+const galeriaEl = document.getElementById('galeria');
+const galeriaEmptyEl = document.getElementById('galeriaEmpty');
+
+/* ---------- estado ---------- */
+let personajes = JSON.parse(localStorage.getItem('gp_personajes') || '[]');
+let galeria = JSON.parse(localStorage.getItem('gp_galeria') || '[]');
+
+let estiloSel = 'manga';
+let formatoSel = 'cuadrado';
+let modoSel = 'vineta';
+let cantidadSel = 1;
+
+let tandaPrompt = '';
+let mencionadosTanda = [];
+let resultados = [];
+let candidatoRefUrl = null;
+let generando = false;
+
+/* ---------- construir selectores visuales ---------- */
+Object.entries(ESTILOS).forEach(([key, val]) => {
+  const div = document.createElement('div');
+  div.className = 'style-card' + (key === estiloSel ? ' selected' : '');
+  div.dataset.key = key;
+  div.innerHTML = val.svg + `<span>${val.label}</span>`;
+  div.addEventListener('click', () => {
+    estiloSel = key;
+    styleGrid.querySelectorAll('.style-card').forEach(c => c.classList.toggle('selected', c.dataset.key === key));
+  });
+  styleGrid.appendChild(div);
+});
+
+Object.entries(FORMATOS).forEach(([key, val]) => {
+  const div = document.createElement('div');
+  div.className = 'formato-card' + (key === formatoSel ? ' selected' : '');
+  div.dataset.key = key;
+  div.innerHTML = `<div class="formato-shape" style="width:${val.shape.w}px;height:${val.shape.h}px;"></div><span>${val.label}</span>`;
+  div.addEventListener('click', () => {
+    formatoSel = key;
+    formatoGrid.querySelectorAll('.formato-card').forEach(c => c.classList.toggle('selected', c.dataset.key === key));
+  });
+  formatoGrid.appendChild(div);
+});
+
+modoGroup.querySelectorAll('.toggle-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    modoSel = btn.dataset.modo;
+    modoGroup.querySelectorAll('.toggle-btn').forEach(b => b.classList.toggle('selected', b === btn));
+  });
+});
+
+[1,2,3,4].forEach(n => {
+  const btn = document.createElement('div');
+  btn.className = 'cantidad-btn' + (n === cantidadSel ? ' selected' : '');
+  btn.textContent = n;
+  btn.addEventListener('click', () => {
+    cantidadSel = n;
+    cantidadRow.querySelectorAll('.cantidad-btn').forEach(b => b.classList.toggle('selected', Number(b.textContent) === n));
+    actualizarAvisoTiempo();
+  });
+  cantidadRow.appendChild(btn);
+});
+
+function actualizarAvisoTiempo(){
+  tiempoAviso.textContent = cantidadSel > 1
+    ? `Tarda ~${cantidadSel * 15}-${cantidadSel * 20}s (el servicio gratuito limita la velocidad)`
+    : '';
+}
+actualizarAvisoTiempo();
+
+/* ---------- personajes ---------- */
+function savePersonajes(){ localStorage.setItem('gp_personajes', JSON.stringify(personajes)); }
+function saveGaleria(){ localStorage.setItem('gp_galeria', JSON.stringify(galeria.slice(0,40))); }
+
+function renderPersonajes(){
+  personajesListEl.innerHTML = '';
+  personajes.forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'personaje-item';
+    div.innerHTML = `
+      <div class="info"><b>${p.nombre}</b><span>${p.descripcion}</span></div>
+      <div>${p.refImageUrl ? '<span class="tag">✓ tiene referencia</span> ' : ''}<button class="btn tiny secondary" data-id="${p.id}">✕</button></div>
+    `;
+    div.querySelector('button').addEventListener('click', () => {
+      personajes = personajes.filter(x => x.id !== p.id);
+      savePersonajes();
+      renderPersonajes();
+    });
+    personajesListEl.appendChild(div);
+  });
+  refSelect.innerHTML = personajes.map(p => `<option value="${p.id}">${p.nombre}</option>`).join('');
+}
+
+addPersonajeBtn.addEventListener('click', () => {
+  const nombre = pNombreEl.value.trim();
+  const descripcion = pDescripcionEl.value.trim();
+  if(!nombre) return;
+  personajes.push({id: Date.now().toString(), nombre, descripcion, refImageUrl: ''});
+  savePersonajes();
+  renderPersonajes();
+  pNombreEl.value = '';
+  pDescripcionEl.value = '';
+});
+
+/* ---------- galería ---------- */
+function renderGaleria(){
+  galeriaEl.innerHTML = '';
+  galeriaEmptyEl.style.display = galeria.length ? 'none' : 'block';
+  galeria.forEach(item => {
+    const div = document.createElement('div');
+    div.className = 'item';
+    div.innerHTML = `<img src="${item.imageUrl}" title="${item.escena}"><p>${item.escena}</p>`;
+    galeriaEl.appendChild(div);
+  });
+}
+
+function setStatus(msg, type){
+  statusEl.textContent = msg;
+  statusEl.className = 'status' + (type ? ' ' + type : '');
+}
+
+const delay = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------- llamadas a la API gratuita (Pollinations) ---------- */
+async function fetchTextoPollinations(promptTexto){
+  const url = `https://text.pollinations.ai/${encodeURIComponent(promptTexto)}?model=openai`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('rate_limit_texto');
+  return (await res.text()).trim().replace(/^["']|["']$/g, '');
+}
+
+function construirUrlImagen(promptOptimizado, formato, modelo, imageRef){
+  const dims = FORMATOS[formato];
+  const seed = Math.floor(Math.random() * 1000000);
+  let url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptOptimizado)}?width=${dims.w}&height=${dims.h}&seed=${seed}&model=${modelo}&nologo=true&safe=true`;
+  if(imageRef) url += `&image=${encodeURIComponent(imageRef)}`;
+  return url;
+}
+
+function precargarImagen(url){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(url);
+    img.onerror = () => reject(new Error('fallo_imagen'));
+    img.src = url;
+    setTimeout(() => reject(new Error('timeout')), 45000);
+  });
+}
+
+function personajesMencionados(escena){
+  const texto = escena.toLowerCase();
+  return personajes.filter(p => p.nombre && texto.includes(p.nombre.toLowerCase()));
+}
+
+/* ---------- render de resultados ---------- */
+function renderResultados(){
+  resultGrid.innerHTML = '';
+  resultados.forEach((r, i) => {
+    const tile = document.createElement('div');
+    tile.className = 'tile' + (r.url && r.url === candidatoRefUrl ? ' ref-candidata' : '');
+    if(r.estado === 'cargando'){
+      tile.innerHTML = `<div class="tile-img"><div class="spinner"></div></div><div class="tile-actions"></div>`;
+    } else if(r.estado === 'error'){
+      tile.innerHTML = `<div class="tile-img"><div class="tile-error">No se pudo generar<br>(límite del servicio gratuito)</div></div>
+        <div class="tile-actions"><button class="btn tiny secondary" data-action="regen" data-idx="${i}">🔄 Reintentar</button></div>`;
+    } else {
+      tile.innerHTML = `
+        <div class="tile-img"><img src="${r.url}"></div>
+        <div class="tile-actions">
+          <button class="btn tiny" data-action="dl" data-idx="${i}">⬇</button>
+          <button class="btn tiny secondary" data-action="ref" data-idx="${i}">📌</button>
+          <button class="btn tiny secondary" data-action="regen" data-idx="${i}">🔄</button>
+        </div>`;
+    }
+    resultGrid.appendChild(tile);
+  });
+
+  resultGrid.querySelectorAll('button').forEach(btn => {
+    const idx = Number(btn.dataset.idx);
+    const action = btn.dataset.action;
+    btn.addEventListener('click', () => {
+      if(action === 'dl') descargarImagen(resultados[idx].url);
+      if(action === 'ref') marcarComoReferencia(resultados[idx].url);
+      if(action === 'regen') regenerarTile(idx);
+    });
+  });
+
+  refRow.style.display = (personajes.length && candidatoRefUrl) ? 'flex' : 'none';
+}
+
+async function descargarImagen(url){
+  try{
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'vineta_comic_' + Date.now() + '.jpg';
+    a.click();
+  }catch(e){
+    window.open(url, '_blank');
+  }
+}
+
+function marcarComoReferencia(url){
+  candidatoRefUrl = url;
+  refRowLabel.textContent = 'Guardar la imagen marcada (borde verde) como referencia de:';
+  renderResultados();
+}
+
+refBtn.addEventListener('click', () => {
+  const id = refSelect.value;
+  const p = personajes.find(x => x.id === id);
+  if(!p || !candidatoRefUrl) return;
+  p.refImageUrl = candidatoRefUrl;
+  savePersonajes();
+  renderPersonajes();
+  setStatus(`✅ Guardado como referencia de ${p.nombre}. Las próximas escenas donde solo aparezca ${p.nombre} van a reusar su apariencia.`, 'ok');
+  candidatoRefUrl = null;
+  renderResultados();
+});
+
+/* ---------- generación ---------- */
+function calcularModeloYReferencia(){
+  const conReferencia = mencionadosTanda.filter(p => p.refImageUrl);
+  if(conReferencia.length === 1) return {modelo:'kontext', imageRef: conReferencia[0].refImageUrl};
+  return {modelo:'flux', imageRef:null};
+}
+
+async function generarUnaImagen(idx){
+  const {modelo, imageRef} = calcularModeloYReferencia();
+  const url = construirUrlImagen(tandaPrompt, formatoSel, modelo, imageRef);
+  await precargarImagen(url);
+  resultados[idx] = {url, estado:'ok'};
+  galeria.unshift({escena: escenaEl.value.trim() || '(variante)', imageUrl:url, promptUsado: tandaPrompt, fecha: Date.now()});
+  saveGaleria();
+  renderGaleria();
+}
+
+async function regenerarTile(idx){
+  if(generando) return;
+  generando = true;
+  resultados[idx] = {estado:'cargando'};
+  renderResultados();
+  try{
+    await generarUnaImagen(idx);
+  }catch(e){
+    resultados[idx] = {estado:'error'};
+  }
+  renderResultados();
+  generando = false;
+}
+
+async function crearTanda(reusarPrompt){
+  if(generando) return;
+  const escena = escenaEl.value.trim();
+  if(!escena && !reusarPrompt){ setStatus('Escribí primero qué pasa en la escena.', 'error'); return; }
+  if(reusarPrompt && !tandaPrompt){ setStatus('Generá primero una tanda con "Crear".', 'error'); return; }
+
+  generando = true;
+  crearBtn.disabled = true;
+  otraTandaBtn.disabled = true;
+  candidatoRefUrl = null;
+
+  const n = cantidadSel;
+  resultados = Array(n).fill(null).map(() => ({estado:'cargando'}));
+  resultado.style.display = 'block';
+  renderResultados();
+  resultado.scrollIntoView({behavior:'smooth', block:'start'});
+
+  try{
+    if(!reusarPrompt){
+      setStatus('⏳ Pensando cómo dibujar tu escena...', '');
+      mencionadosTanda = personajesMencionados(escena);
+      const personajesTexto = mencionadosTanda.map(p => `${p.nombre}: ${p.descripcion}`).join('; ') || 'ninguno especificado';
+      const framing = modoSel === 'vineta'
+        ? 'single comic panel composition, part of a larger comic page layout, may include a thin panel border'
+        : 'standalone illustration only, no panel border or frame, simple uncluttered background so it can be cut out and combined with other illustrations later';
+      const metaPrompt = `Sos un experto en prompts para generadores de imágenes de cómic (estilo ${ESTILOS[estiloSel].prompt}). Con esta información, generá UNA sola línea de prompt en inglés, sin explicaciones, sin comillas, para generar la imagen:\nEscena: ${escena}\nEstilo: ${ESTILOS[estiloSel].prompt}\nComposición: ${framing}\nPersonajes presentes: ${personajesTexto}\nSiempre incluí en el prompt final (en inglés): anatomically correct, correct number of fingers and limbs, no extra limbs, clean linework, no watermark, no on-image text or speech bubbles, high quality illustration.\nDevolvé SOLO el prompt final en inglés, nada más.`;
+      tandaPrompt = await fetchTextoPollinations(metaPrompt);
+    }
+
+    techBox.textContent = tandaPrompt;
+    techBox.style.display = 'none';
+    techToggle.textContent = '🔍 Ver cómo se armó esta imagen';
+
+    for(let i = 0; i < n; i++){
+      setStatus(n > 1 ? `⏳ Generando opción ${i+1} de ${n}...` : '⏳ Dibujando...', '');
+      try{
+        await generarUnaImagen(i);
+      }catch(e){
+        resultados[i] = {estado:'error'};
+      }
+      renderResultados();
+      if(i < n - 1) await delay(16000);
+    }
+
+    setStatus(n > 1 ? '✅ Listas tus opciones' : '✅ Lista', 'ok');
+    otraTandaBtn.style.display = 'inline-block';
+  }catch(err){
+    setStatus('❌ El servicio gratuito está saturado un momento, esperá unos segundos y probá de nuevo.', 'error');
+  }finally{
+    generando = false;
+    crearBtn.disabled = false;
+    otraTandaBtn.disabled = false;
+  }
+}
+
+crearBtn.addEventListener('click', () => crearTanda(false));
+otraTandaBtn.addEventListener('click', () => crearTanda(true));
+
+techToggle.addEventListener('click', () => {
+  const showing = techBox.style.display === 'block';
+  techBox.style.display = showing ? 'none' : 'block';
+  techToggle.textContent = showing ? '🔍 Ver cómo se armó esta imagen' : '🔼 Ocultar';
+});
+
+renderPersonajes();
+renderGaleria();
+</script>
+</body>
+</html>
